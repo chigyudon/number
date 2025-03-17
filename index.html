@@ -17,6 +17,7 @@
     };
     this.numbers = JSON.parse(localStorage.getItem("numbers")) || Array.from({ length: 36 }, (_, i) => i + 1);
     this.undoStack = [];
+    this.recognition = null;
     this.checkPassword();
   }
 
@@ -54,6 +55,11 @@
     this.voiceButton.textContent = "Start Voice Input";
     this.voiceButton.addEventListener("click", () => this.initVoiceRecognition());
     
+    this.stopVoiceButton = document.createElement("button");
+    this.stopVoiceButton.textContent = "Stop Voice Input";
+    this.stopVoiceButton.style.display = "none";
+    this.stopVoiceButton.addEventListener("click", () => this.stopVoiceRecognition());
+    
     this.voiceStatus = document.createElement("p");
     this.voiceStatus.textContent = "Tap 'Start Voice Input' to begin...";
     
@@ -62,7 +68,7 @@
     this.errorMessage = document.createElement("p");
     this.errorMessage.style.color = "red";
     
-    document.body.append(this.inputField, this.undoButton, this.voiceButton, this.voiceStatus, this.message, this.warning, this.errorMessage);
+    document.body.append(this.inputField, this.undoButton, this.voiceButton, this.stopVoiceButton, this.voiceStatus, this.message, this.warning, this.errorMessage);
   }
 
   render() {
@@ -89,102 +95,48 @@
     document.body.prepend(container);
   }
 
-  handleKeydown(event) {
-    if (event.key === "Enter") {
-      this.processInput(this.inputField.value.trim());
-    }
-  }
-
-  processInput(input) {
-    let newNumber = input.toLowerCase().trim();
-    if (newNumber === "single zero") {
-      newNumber = 0;
-    } else if (newNumber === "double zero") {
-      newNumber = "00";
-    } else {
-      newNumber = input.replace(/[^0-9]/g, "");
-      newNumber = parseInt(newNumber, 10);
-    }
-    
-    if (!this.validNumbers.has(newNumber)) {
-      this.errorMessage.textContent = "Invalid entry. Please enter a valid number.";
-      this.inputField.value = "";
-      return;
-    }
-    this.errorMessage.textContent = "";
-    
-    this.undoStack.push([...this.numbers]);
-    this.numbers.shift();
-    this.numbers.push(newNumber);
-    this.inputField.value = "";
-    this.checkForTriples();
-    this.checkForUpcomingRemoval();
-    this.saveProgress();
-    this.render();
-  }
-  
-  undoLastEntry() {
-    if (this.undoStack.length > 0) {
-      this.numbers = this.undoStack.pop();
-      this.saveProgress();
-      this.render();
-    }
-  }
-  
-  checkForTriples() {
-    const countMap = {};
-    this.message.innerHTML = "";
-    for (const num of this.numbers) {
-      countMap[num] = (countMap[num] || 0) + 1;
-      if (countMap[num] === 3) {
-        const msg = document.createElement("p");
-        msg.textContent = `Number ${num} appears 3 times!`;
-        this.message.appendChild(msg);
-      }
-    }
-  }
-  
-  checkForUpcomingRemoval() {
-    const firstNumber = this.numbers[0];
-    if (this.numbers.filter(n => n === firstNumber).length === 3) {
-      this.warning.textContent = `Warning: ${firstNumber} is about to be removed, preventing it from appearing 3 times again.`;
-    } else {
-      this.warning.textContent = "";
-    }
-  }
-  
-  saveProgress() {
-    localStorage.setItem("numbers", JSON.stringify(this.numbers));
-  }
-  
   initVoiceRecognition() {
     if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       this.errorMessage.textContent = "Voice recognition is not supported in this browser.";
       return;
     }
     
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = "en-US";
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    this.recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    this.recognition.lang = "en-US";
+    this.recognition.continuous = false;
+    this.recognition.interimResults = false;
     
-    recognition.onstart = () => {
+    this.recognition.onstart = () => {
       this.voiceStatus.textContent = "Listening...";
+      this.voiceButton.style.display = "none";
+      this.stopVoiceButton.style.display = "inline";
     };
     
-    recognition.onresult = (event) => {
+    this.recognition.onresult = (event) => {
       let spokenText = event.results[0][0].transcript.trim();
       this.inputField.value = spokenText;
       this.processInput(spokenText);
       this.voiceStatus.textContent = "Tap 'Start Voice Input' to begin...";
     };
     
-    recognition.onerror = () => {
+    this.recognition.onerror = () => {
       this.errorMessage.textContent = "Could not recognize speech. Try again.";
       this.voiceStatus.textContent = "Tap 'Start Voice Input' to begin...";
     };
     
-    recognition.start();
+    this.recognition.onend = () => {
+      this.voiceButton.style.display = "inline";
+      this.stopVoiceButton.style.display = "none";
+    };
+    
+    this.recognition.start();
+  }
+
+  stopVoiceRecognition() {
+    if (this.recognition) {
+      this.recognition.stop();
+      this.voiceStatus.textContent = "Voice input stopped.";
+    }
   }
 }
 
